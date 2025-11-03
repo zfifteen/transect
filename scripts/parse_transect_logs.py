@@ -241,7 +241,7 @@ def plot_histogram(results: Dict[str, Dict], output_path: str):
     # Create output directory if needed
     os.makedirs(os.path.dirname(output_path) or '.', exist_ok=True)
     
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 6))
+    ax1, ax2 = plt.subplots(1, 2, figsize=(14, 6))
     
     # Plot RTT histograms
     for experiment, metrics in results.items():
