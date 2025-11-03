@@ -195,24 +195,24 @@ class TransecUDPClient:
         
         log_fh = None
         if log_file:
-            log_fh = open(log_file, 'w')
-            # Write benchmark metadata
-            metadata = {
-                'event': 'benchmark_start',
-                'timestamp': time.time(),
-                'count': count,
-                'slot_duration': self.slot_duration,
-                'skew_slots': self.skew_slots,
-                'prime_strategy': self.cipher.prime_strategy,
-                'drift_window': self.cipher.drift_window,
-            }
-            log_fh.write(json.dumps(metadata) + '\n')
-            log_fh.flush()
-        
-        successes = 0
-        rejections = 0
-        total_time = 0
-        rtts = []
+            with open(log_file, 'w') as log_fh:
+                # Write benchmark metadata
+                metadata = {
+                    'event': 'benchmark_start',
+                    'timestamp': time.time(),
+                    'count': count,
+                    'slot_duration': self.slot_duration,
+                    'skew_slots': self.skew_slots,
+                    'prime_strategy': self.cipher.prime_strategy,
+                    'drift_window': self.cipher.drift_window,
+                }
+                log_fh.write(json.dumps(metadata) + '\n')
+                log_fh.flush()
+                
+                successes = 0
+                rejections = 0
+                total_time = 0
+                rtts = []
         
         for i in range(count):
             # Apply clock skew randomly per message
