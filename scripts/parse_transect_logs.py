@@ -8,8 +8,8 @@ Reads LDJSON logs from benchmark runs, calculates metrics, and outputs:
 - Bootstrap 95% confidence intervals for rejection rates
 
 Usage:
-    python scripts/parse_transect_logs.py baseline.log prime.log --out results.csv
-    python scripts/parse_transect_logs.py baseline*.log prime*.log --out results.csv --plot plots/drift-hist.png
+    python scripts/parse_transec_logs.py baseline.log prime.log --out results.csv
+    python scripts/parse_transec_logs.py baseline*.log prime*.log --out results.csv --plot plots/drift-hist.png
 """
 
 import json
