@@ -81,7 +81,13 @@ def calculate_metrics(events: List[Dict]) -> Dict:
     
     # Calculate RTT percentiles
     p50_rtt = statistics.median(rtts) if rtts else 0.0
-    p95_rtt = statistics.quantiles(rtts, n=20)[18] if len(rtts) >= 20 else (max(rtts) if rtts else 0.0)
+    # Use more robust percentile calculation
+    if len(rtts) >= 2:
+        sorted_rtts = sorted(rtts)
+        p95_idx = int(0.95 * len(sorted_rtts))
+        p95_rtt = sorted_rtts[min(p95_idx, len(sorted_rtts) - 1)]
+    else:
+        p95_rtt = max(rtts) if rtts else 0.0
     mean_rtt = statistics.mean(rtts) if rtts else 0.0
     
     # Calculate throughput

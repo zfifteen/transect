@@ -240,7 +240,7 @@ class TransecUDPClient:
                 response = self.cipher.open(response_packet)
                 if response:
                     successes += 1
-                    # Clamp RTT to 0 for negative skews
+                    # Clamp RTT to 0 to handle any timing precision issues
                     rtt_ms = max(0.0, rtt_ms)
                     rtts.append(rtt_ms)
                     total_time += rtt
@@ -267,7 +267,7 @@ class TransecUDPClient:
                     'sequence': self.sequence,
                     'success': success,
                     'rtt_ms': rtt_ms,
-                    'slot_index': current_slot if 'current_slot' in locals() else 0,
+                    'slot_index': current_slot if success else 0,
                     'skew_applied': skew if self.skew_slots > 0 else 0,
                 }
                 log_fh.write(json.dumps(event) + '\n')
