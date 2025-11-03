@@ -176,7 +176,6 @@ class TransecUDPClient:
         skew_seconds = skew * self.slot_duration
         
         # Monkey-patch the cipher's get_current_slot method
-        original_get_current_slot = self.cipher.get_current_slot
         def skewed_get_current_slot():
             # Calculate skewed time
             skewed_time = time.time() + skew_seconds
