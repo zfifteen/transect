@@ -249,9 +249,13 @@ class TestIntegration(unittest.TestCase):
     def test_command_line_interface(self):
         """Test that module can be run as script."""
         import subprocess
+        # Find the repository root by looking for setup.py
+        test_dir = os.path.dirname(os.path.abspath(__file__))
+        repo_root = os.path.dirname(test_dir)
+        
         result = subprocess.run(
             ['python', 'transec/kdf.py'],
-            cwd='/home/runner/work/transect/transect',
+            cwd=repo_root,
             capture_output=True,
             text=True,
             timeout=5

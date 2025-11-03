@@ -13,13 +13,12 @@ Mathematical Foundation:
 
 Properties:
     - Deterministic: Same slot_id always produces same salt
-    - Platform-independent: Uses integer arithmetic only (no float modulo)
+    - Platform-independent: Deterministic float operations with IEEE 754 compliance
     - High entropy: Golden ratio ensures good distribution
     - Bit-exact: Deterministic float-to-int scale (10^9)
 """
 
 import math
-from typing import Optional
 
 # Golden ratio constant
 PHI = (1 + math.sqrt(5)) / 2.0
