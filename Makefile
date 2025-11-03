@@ -29,7 +29,7 @@ bench-drift:
 	bash scripts/run_benchmark.sh
 
 analyze:
-	python scripts/parse_transect_logs.py baseline*.log prime*.log --out results.csv --plot plots/drift-hist.png
+	python scripts/parse_transec_logs.py baseline*.log prime*.log --out results.csv --plot plots/drift-hist.png
 
 clean:
 	rm -f *.log results.csv
