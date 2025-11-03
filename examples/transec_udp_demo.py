@@ -224,7 +224,7 @@ class TransecUDPClient:
             
             success = False
             rtt_ms = 0.0
-            
+            current_slot = 0
             try:
                 # Get current slot for logging
                 current_slot = self.cipher.get_current_slot()
