@@ -169,7 +169,7 @@ class TransecUDPClient:
     def _inject_clock_skew(self):
         """Inject synthetic clock skew by manipulating the cipher's time."""
         if self.skew_slots == 0:
-            return
+            return 0
         
         # Apply random skew within ±skew_slots range
         skew = random.randint(-abs(self.skew_slots), abs(self.skew_slots))
