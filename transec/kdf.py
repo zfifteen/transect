@@ -1,131 +1,87 @@
 #!/usr/bin/env python3
 """
-KDF: Key Derivation Function utilities with golden ratio-based salt generation.
+KDF: Key Derivation Function utilities for slot-indexed key derivation.
 
-This module implements deterministic HKDF salt generation using the golden ratio (φ)
-for enhanced entropy distribution across time slots.
+This module implements a secure key derivation scheme based on HKDF (HMAC-based
+Key Derivation Function, RFC 5869). It derives per-slot keys in a deterministic
+manner by incorporating the slot index into the HKDF 'info' parameter, which is
+the standard-compliant way to introduce context-specific data.
 
-Mathematical Foundation:
-    Z = A(B / c) with c = 2^{256} for salt mod in HKDF (bit-security bound)
-    A = slot_id
-    B = floor(θ′(slot_id, k) * 10^9)
-    θ′(n,k) = φ * ((n % φ)/φ)^k with k=0.3
-
-Properties:
-    - Deterministic: Same slot_id always produces same salt
-    - Platform-independent: Deterministic float operations with IEEE 754 compliance
-    - High entropy: Golden ratio ensures good distribution
-    - Bit-exact: Deterministic float-to-int scale (10^9)
+Security Model:
+- IKM (Input Keying Material): The initial entropy is provided by the IKM.
+  This material should be a high-entropy secret, ideally from a cryptographic
+  random number generator.
+- Salt: A fixed, zero-filled salt is used. Per RFC 5869, a constant salt is
+  acceptable when the IKM is high-entropy. If the IKM might be weak, a
+  random salt is recommended, but for deterministic derivation, a fixed
+  salt is used.
+- Info: To derive unique keys for different contexts (in this case, time
+  slots), the slot ID is hashed with a domain-separation tag and used as the
+  'info' parameter in the HKDF-Expand step. This ensures that each slot
+  produces a unique, cryptographically separate key.
+- Versioning: The domain-separation tag is versioned (e.g., "transect/hkdf/v1")
+  to allow for future cryptographic agility. If the algorithm is ever
+  updated, incrementing the version number will ensure that old and new keys
+  do not collide.
 """
 
-import math
+import hmac
+import hashlib
 
-# Golden ratio constant
-PHI = (1 + math.sqrt(5)) / 2.0
-
-
-def theta_prime(slot: int, k: float = 0.3) -> float:
+def hkdf_expand_slot(ikm: bytes, slot_id: int, out_len: int = 32) -> bytes:
     """
-    Compute θ′(n,k) = φ * ((n % φ)/φ)^k.
-    
-    Geometric resolution function based on the golden ratio.
-    
+    Derives a key for a specific slot using HKDF-Expand.
+
+    This function uses a fixed salt and a deterministic 'info' parameter
+    derived from the slot_id.
+
     Args:
-        slot: Time slot index
-        k: Exponent parameter (default: 0.3)
-    
-    Returns:
-        Computed theta prime value
-    """
-    frac = math.fmod(slot, PHI) / PHI
-    return PHI * (frac ** k)
+        ikm: Input Keying Material (high-entropy secret).
+        slot_id: The slot index (0 <= slot_id < 2**64).
+        out_len: The desired output length in bytes.
 
-
-def hkdf_salt_for_slot(slot_id: int, k: float = 0.3, out_len: int = 32) -> bytes:
-    """
-    Generate deterministic HKDF salt for a time slot using golden ratio.
-    
-    Implements the formula:
-        Z = slot_id * floor(θ′(slot_id, k) * 10^9) % (1 << (8 * out_len))
-    
-    Args:
-        slot_id: Time slot index (must be >= 0)
-        k: Exponent parameter for theta_prime (default: 0.3)
-        out_len: Output length in bytes (default: 32)
-    
     Returns:
-        Deterministic salt as bytes (big-endian)
-    
+        The derived key for the given slot.
+
     Raises:
-        ValueError: If slot_id is negative or out_len is invalid
-    
-    Example:
-        >>> salt = hkdf_salt_for_slot(42)
-        >>> len(salt)
-        32
-        >>> # Same slot always produces same salt
-        >>> hkdf_salt_for_slot(42) == hkdf_salt_for_slot(42)
-        True
+        ValueError: If slot_id is out of the valid range.
     """
-    if slot_id < 0:
-        raise ValueError(f"slot_id must be non-negative, got {slot_id}")
-    if out_len <= 0:
-        raise ValueError(f"out_len must be positive, got {out_len}")
-    
-    # Deterministic float-to-int scale factor
-    scale = 10**9
-    
-    # Compute theta prime and scale to integer
-    tp = theta_prime(slot_id, k)
-    mul = math.floor(tp * scale)
-    
-    # Apply modulo to keep within bit-security bound
-    mod_bits = 8 * out_len
-    salt_int = (slot_id * mul) % (1 << mod_bits)
-    
-    # Convert to bytes (big-endian)
-    return salt_int.to_bytes(out_len, "big")
+    if not (0 <= slot_id < 2**64):
+        raise ValueError(f"slot_id must be in the range [0, 2**64), got {slot_id}")
 
+    # Use a fixed, zero-filled salt as per recommendation for deterministic derivation.
+    salt = b'\x00' * 32
 
-def test_salt_diversity(num_slots: int = 100) -> bool:
+    # HKDF-Extract: Create a pseudorandom key (PRK)
+    prk = hmac.new(salt, ikm, hashlib.sha256).digest()
+
+    # HKDF-Expand: Derive the output key
+    info = _hkdf_info_for_slot(slot_id)
+    t = b""
+    okm = b""
+    i = 1
+    while len(okm) < out_len:
+        t = hmac.new(prk, t + info + bytes([i]), hashlib.sha256).digest()
+        okm += t
+        i += 1
+
+    return okm[:out_len]
+
+def _hkdf_info_for_slot(slot_id: int) -> bytes:
     """
-    Test salt diversity and determinism.
-    
-    Verifies that:
-    1. All salts are unique across num_slots consecutive slots
-    2. Repeated calls for the same slot produce identical results
-    
+    Generates a deterministic 'info' parameter for HKDF based on the slot ID.
+
+    This uses BLAKE2s for fast, secure hashing with a domain separation tag.
+
     Args:
-        num_slots: Number of slots to test (default: 100)
-    
+        slot_id: The slot index.
+
     Returns:
-        True if all checks pass
-    
-    Raises:
-        AssertionError: If diversity or determinism checks fail
+        A byte string to be used as the 'info' parameter in HKDF.
     """
-    # Test diversity
-    salts = [hkdf_salt_for_slot(i) for i in range(num_slots)]
-    unique = len(set(salts))
-    assert unique == num_slots, f"Only {unique}/{num_slots} unique salts"
-    
-    # Test determinism
-    for i in range(min(10, num_slots)):
-        salt1 = hkdf_salt_for_slot(i)
-        salt2 = hkdf_salt_for_slot(i)
-        assert salt1 == salt2, f"Non-deterministic for slot {i}"
-    
-    return True
-
-
-if __name__ == "__main__":
-    # Run basic tests
-    print("Testing salt diversity and determinism...")
-    test_salt_diversity()
-    print("✓ All tests passed")
-    
-    # Show some example salts
-    print("\nExample salts for first 5 slots:")
-    for i in range(5):
-        salt = hkdf_salt_for_slot(i)
-        print(f"  Slot {i}: {salt.hex()[:32]}...")
+    # Domain separation tag with versioning
+    domain_sep = b"transect/hkdf/v1"
+    h = hashlib.blake2s(digest_size=32)
+    h.update(domain_sep)
+    h.update(slot_id.to_bytes(8, "big"))  # Use 8 bytes for 64-bit integer
+    return h.digest()
