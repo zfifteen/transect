@@ -186,117 +186,31 @@ class TransecUDPClient:
         return skew
     
         def run_benchmark(self, count: int = 100, log_file: str = None):
-        """Run performance benchmark with optional LDJSON logging."""
-        print(f"🔐 TRANSEC UDP Client - Benchmarking {count} messages")
-        print(f"Connected to {self.host}:{self.port}")
-        if self.skew_slots > 0:
-            print(f"Clock skew: ±{self.skew_slots} slots")
-        print()
-        
-        successes = 0
-        rejections = 0
-        total_time = 0
-        rtts = []
-        
-        log_fh = None
-        if log_file:
-            with open(log_file, 'w') as log_fh:
-                # Write benchmark metadata
-                metadata = {
-                    'event': 'benchmark_start',
-                    'timestamp': time.time(),
-                    'count': count,
-                    'slot_duration': self.slot_duration,
-                    'skew_slots': self.skew_slots,
-                    'prime_strategy': self.cipher.prime_strategy,
-                    'drift_window': self.cipher.drift_window,
-                }
-                log_fh.write(json.dumps(metadata) + '
-')
-')
-')
-')
-                log_fh.flush()
-                
-                for i in range(count):
-                    # Apply clock skew randomly per message
-                    skew = self._inject_clock_skew() if self.skew_slots > 0 else 0
-                    
-                    message = f"Benchmark message {i+1}"
-                    self.sequence += 1
-                    
-                    success = False
-                    current_slot = 0
-                    try:
-                        # Get current slot for logging
-                        current_slot = self.cipher.get_current_slot()
-                        
-                        packet = self.cipher.seal(message.encode(), self.sequence)
-                        
-                        start = time.time()
-                        self.socket.sendto(packet, (self.host, self.port))
-                        response_packet, _ = self.socket.recvfrom(65536)
-                        rtt = time.time() - start
-                        rtt_ms = rtt * 1000
-                        
-                        response = self.cipher.open(response_packet)
-                        if response:
-                            successes += 1
-                            # Clamp RTT to 0 to handle any timing precision issues
-                            rtt_ms = max(0.0, rtt_ms)
-                            rtts.append(rtt_ms)
-                            total_time += rtt
-                            success = True
-                        else:
-                            rejections += 1
-                        
-                        if (i + 1) % 10 == 0:
-                            print(f"Progress: {i+1}/{count} messages")
-                    
-                    except socket.timeout:
-                        rejections += 1
-                        rtt_ms = -1.0  # Indicate timeout
-                    except Exception as e:
-                        rejections += 1
-                        print(f"Error at message {i+1}: {e}")
-                        rtt_ms = -1.0
-                    
-                    # Log event in LDJSON format
-                    event = {
-                        'event': 'message_sent',
-                        'timestamp': time.time(),
-                        'sequence': self.sequence,
-                        'success': success,
-                        'rtt_ms': rtt_ms,
-                        'slot_index': current_slot if success else 0,
-                        'skew_applied': skew if self.skew_slots > 0 else 0,
-                    }
-                    log_fh.write(json.dumps(event) + '
-')
-')
-')
-')
-                    log_fh.flush()
-                
-                # Write benchmark end event
-                total_messages = successes + rejections
-                end_event = {
-                    'event': 'benchmark_end',
-                    'timestamp': time.time(),
-                    'total_messages': total_messages,
-                    'successes': successes,
-                    'rejections': rejections,
-                }
-                log_fh.write(json.dumps(end_event) + '
-')
-')
-')
-')
-                print(f')
-Log written to {log_file}')
-Log written to {log_file}")
-        else:
-            for i in range(count):
+    print(f"🔐 TRANSEC UDP Client - Benchmarking {count} messages")
+    print(f"Connected to {self.host}:{self.port}")
+    if self.skew_slots > 0:
+        print(f"Clock skew: ±{self.skew_slots} slots")
+    print()
+    
+    successes = 0
+    rejections = 0
+    total_time = 0
+    rtts = []
+    
+    log_fh = None
+    if log_file:
+        with open(log_file, 'w') as log_fh:
+            # Write benchmark metadata
+            metadata = {
+                'event': 'benchmark_start',
+                'timestamp': time.time(),
+                'count': count,
+                'slot_duration': self.slot_duration,
+                'skew_slots': self.skew_slots,
+                'prime_strategy': self.cipher.prime_strategy,
+                'drift_window': self.cipher.drift_window,
+            }
+            log_fh.write(json.dumps(metadata) + '\n' )
                 # Apply clock skew randomly per message
                 skew = self._inject_clock_skew() if self.skew_slots > 0 else 0
                 
@@ -338,114 +252,176 @@ Log written to {log_file}")
                     rejections += 1
                     print(f"Error at message {i+1}: {e}")
                     rtt_ms = -1.0
-        
-        print()
-        print("=" * 60)
-        print("Benchmark Results:")
-        total_messages = successes + rejections
-        print(f"  Success rate: {successes}/{total_messages} ({successes/total_messages*100:.1f}%)")
-        print(f"  Rejections: {rejections} ({rejections/total_messages*100:.1f}%)")
-        if rtts:
-            print(f"  Average RTT: {sum(rtts)/len(rtts):.2f}ms")
-            print(f"  Min RTT: {min(rtts):.2f}ms")
-            print(f"  Max RTT: {max(rtts):.2f}ms")
-            print(f"  Throughput: {successes/total_time:.1f} msg/sec")
-        print("=" * 60)
-        
-        self.socket.close()
+                
+                # Log event in LDJSON format
+                event = {
+                    'event': 'message_sent',
+                    'timestamp': time.time(),
+                    'sequence': self.sequence,
+                    'success': success,
+                    'rtt_ms': rtt_ms,
+                    'slot_index': current_slot if success else 0,
+                    'skew_applied': skew if self.skew_slots > 0 else 0,
+                }
+                log_fh.write(json.dumps(event) + '\n' )
+            end_event = {
+                'event': 'benchmark_end',
+                'timestamp': time.time(),
+                'total_messages': total_messages,
+                'successes': successes,
+                'rejections': rejections,
+            }
+            log_fh.write(json.dumps(end_event) + '\n' )
+        for i in range(count):
+            # Apply clock skew randomly per message
+            skew = self._inject_clock_skew() if self.skew_slots > 0 else 0
+            
+            message = f"Benchmark message {i+1}"
+            self.sequence += 1
+            
+            success = False
+            current_slot = 0
+            try:
+                # Get current slot for logging
+                current_slot = self.cipher.get_current_slot()
+                
+                packet = self.cipher.seal(message.encode(), self.sequence)
+                
+                start = time.time()
+                self.socket.sendto(packet, (self.host, self.port))
+                response_packet, _ = self.socket.recvfrom(65536)
+                rtt = time.time() - start
+                rtt_ms = rtt * 1000
+                
+                response = self.cipher.open(response_packet)
+                if response:
+                    successes += 1
+                    # Clamp RTT to 0 to handle any timing precision issues
+                    rtt_ms = max(0.0, rtt_ms)
+                    rtts.append(rtt_ms)
+                    total_time += rtt
+                    success = True
+                else:
+                    rejections += 1
+                
+                if (i + 1) % 10 == 0:
+                    print(f"Progress: {i+1}/{count} messages")
+            
+            except socket.timeout:
+                rejections += 1
+                rtt_ms = -1.0  # Indicate timeout
+            except Exception as e:
+                rejections += 1
+                print(f"Error at message {i+1}: {e}")
+                rtt_ms = -1.0
+    
+    print()
+    print("=" * 60)
+    print("Benchmark Results:")
+    total_messages = successes + rejections
+    print(f"  Success rate: {successes}/{total_messages} ({successes/total_messages*100:.1f}%)")
+    print(f"  Rejections: {rejections} ({rejections/total_messages*100:.1f}%)")
+    if rtts:
+        print(f"  Average RTT: {sum(rtts)/len(rtts):.2f}ms")
+        print(f"  Min RTT: {min(rtts):.2f}ms")
+        print(f"  Max RTT: {max(rtts):.2f}ms")
+        print(f"  Throughput: {successes/total_time:.1f} msg/sec")
+    print("=" * 60)
+    
+    self.socket.close()
 def main():
-    parser = argparse.ArgumentParser(
-        description="TRANSEC UDP Demo - Zero-Handshake Encrypted Messaging"
+parser = argparse.ArgumentParser(
+    description="TRANSEC UDP Demo - Zero-Handshake Encrypted Messaging"
+)
+parser.add_argument(
+    "mode",
+    choices=["server", "client", "benchmark"],
+    help="Run as server, interactive client, or benchmark client"
+)
+parser.add_argument(
+    "--host",
+    default=DEFAULT_HOST,
+    help=f"Host address (default: {DEFAULT_HOST})"
+)
+parser.add_argument(
+    "--port",
+    type=int,
+    default=DEFAULT_PORT,
+    help=f"Port number (default: {DEFAULT_PORT})"
+)
+parser.add_argument(
+    "--count",
+    type=int,
+    default=100,
+    help="Number of messages for benchmark (default: 100)"
+)
+parser.add_argument(
+    "--prime_strategy",
+    choices=["none", "nearest", "next"],
+    default="none",
+    help="Prime slot mapping strategy (default: none)"
+)
+parser.add_argument(
+    "--drift_window",
+    type=int,
+    default=2,
+    help="Clock drift tolerance in slots (default: 2)"
+)
+parser.add_argument(
+    "--slot_duration",
+    type=float,
+    default=5.0,
+    help="Slot duration in seconds (default: 5.0)"
+)
+parser.add_argument(
+    "--skew_slots",
+    type=int,
+    default=0,
+    help="Synthetic clock skew in ±slots (default: 0, disabled)"
+)
+parser.add_argument(
+    "--out",
+    help="Output log file for benchmark (LDJSON format)"
+)
+
+args = parser.parse_args()
+
+print()
+print("=" * 60)
+print("TRANSEC UDP Demo")
+print("Zero-Handshake Encrypted Messaging")
+print("=" * 60)
+print()
+
+if args.mode == "server":
+    server = TransecUDPServer(
+        args.host, args.port, DEMO_SECRET,
+        slot_duration=args.slot_duration,
+        drift_window=args.drift_window,
+        prime_strategy=args.prime_strategy
     )
-    parser.add_argument(
-        "mode",
-        choices=["server", "client", "benchmark"],
-        help="Run as server, interactive client, or benchmark client"
+    server.start()
+
+elif args.mode == "client":
+    client = TransecUDPClient(
+        args.host, args.port, DEMO_SECRET,
+        slot_duration=args.slot_duration,
+        drift_window=args.drift_window,
+        prime_strategy=args.prime_strategy
     )
-    parser.add_argument(
-        "--host",
-        default=DEFAULT_HOST,
-        help=f"Host address (default: {DEFAULT_HOST})"
+    client.run_interactive()
+
+elif args.mode == "benchmark":
+    client = TransecUDPClient(
+        args.host, args.port, DEMO_SECRET,
+        slot_duration=args.slot_duration,
+        drift_window=args.drift_window,
+        prime_strategy=args.prime_strategy,
+        skew_slots=args.skew_slots
     )
-    parser.add_argument(
-        "--port",
-        type=int,
-        default=DEFAULT_PORT,
-        help=f"Port number (default: {DEFAULT_PORT})"
-    )
-    parser.add_argument(
-        "--count",
-        type=int,
-        default=100,
-        help="Number of messages for benchmark (default: 100)"
-    )
-    parser.add_argument(
-        "--prime_strategy",
-        choices=["none", "nearest", "next"],
-        default="none",
-        help="Prime slot mapping strategy (default: none)"
-    )
-    parser.add_argument(
-        "--drift_window",
-        type=int,
-        default=2,
-        help="Clock drift tolerance in slots (default: 2)"
-    )
-    parser.add_argument(
-        "--slot_duration",
-        type=float,
-        default=5.0,
-        help="Slot duration in seconds (default: 5.0)"
-    )
-    parser.add_argument(
-        "--skew_slots",
-        type=int,
-        default=0,
-        help="Synthetic clock skew in ±slots (default: 0, disabled)"
-    )
-    parser.add_argument(
-        "--out",
-        help="Output log file for benchmark (LDJSON format)"
-    )
-    
-    args = parser.parse_args()
-    
-    print()
-    print("=" * 60)
-    print("TRANSEC UDP Demo")
-    print("Zero-Handshake Encrypted Messaging")
-    print("=" * 60)
-    print()
-    
-    if args.mode == "server":
-        server = TransecUDPServer(
-            args.host, args.port, DEMO_SECRET,
-            slot_duration=args.slot_duration,
-            drift_window=args.drift_window,
-            prime_strategy=args.prime_strategy
-        )
-        server.start()
-    
-    elif args.mode == "client":
-        client = TransecUDPClient(
-            args.host, args.port, DEMO_SECRET,
-            slot_duration=args.slot_duration,
-            drift_window=args.drift_window,
-            prime_strategy=args.prime_strategy
-        )
-        client.run_interactive()
-    
-    elif args.mode == "benchmark":
-        client = TransecUDPClient(
-            args.host, args.port, DEMO_SECRET,
-            slot_duration=args.slot_duration,
-            drift_window=args.drift_window,
-            prime_strategy=args.prime_strategy,
-            skew_slots=args.skew_slots
-        )
-        client.run_benchmark(args.count, log_file=args.out)
+    client.run_benchmark(args.count, log_file=args.out)
 
 
 if __name__ == "__main__":
-    main()
+main()
 

@@ -43,3 +43,4 @@ plots/
 
 # Temp files
 /tmp/
+/.grok/
