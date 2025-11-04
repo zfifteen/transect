@@ -65,18 +65,20 @@ cipher = AdaptiveTransecCipher(
 )
 ```
 
-#### Prime Optimization
+#### Arctan-Geodesic Prime Optimization
 
-Use prime-valued slot indices for enhanced synchronization stability:
+Use arctan-geodesic prime-valued slot indices for 25-88% curvature reduction and enhanced synchronization stability:
 
 ```python
 cipher = TransecCipher(
     secret,
     slot_duration=3600,      # 1-hour slots
     drift_window=3,          # ±3 slots tolerance
-    prime_strategy="nearest" # Map to nearest prime slot
+    prime_strategy="nearest" # Map to geodesic-optimal prime slot
 )
 ```
+
+The arctan-geodesic formula `κ(n) = d(n) · ln(n+1) / e² · [1 + arctan(φ · frac(n/φ))]` leverages the golden ratio φ to create optimal synchronization paths through the discrete time-slot space.
 
 #### OTAR-Lite Key Refresh
 
@@ -101,7 +103,7 @@ cipher = OTARTransecCipher(
 - **ChaCha20-Poly1305 AEAD**: Authenticated encryption with associated data
 - **Replay Protection**: Automatic sequence number tracking
 - **Clock Drift Tolerance**: Configurable time window acceptance
-- **Prime Optimization**: 25-88% curvature reduction for enhanced stability
+- **Arctan-Geodesic Prime Optimization**: 25-88% curvature reduction using golden ratio φ
 
 ### Advanced Features
 
