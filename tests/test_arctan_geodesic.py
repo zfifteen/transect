@@ -22,7 +22,8 @@ from transec.prime_optimization import (
     compute_curvature,
     compute_curvature_reduction,
     normalize_slot_to_prime,
-    find_nearest_prime,
+    find_geodesic_optimal_prime,
+    find_nearest_prime_by_distance,
     is_prime,
     count_divisors,
     PHI
@@ -88,7 +89,7 @@ class TestArctanGeodesicReduction(unittest.TestCase):
         composites = [4, 6, 8, 9, 10, 12, 15, 20, 100, 1000]
         
         for composite in composites:
-            prime = normalize_slot_to_prime(composite, strategy="nearest", use_arctan_geodesic=True)
+            prime = normalize_slot_to_prime(composite, strategy="geodesic")
             reduction = compute_curvature_reduction(composite, prime, use_arctan_geodesic=True)
             
             # Should have positive reduction (improvement)
@@ -102,7 +103,7 @@ class TestArctanGeodesicReduction(unittest.TestCase):
         
         reductions = []
         for composite in composites:
-            prime = normalize_slot_to_prime(composite, strategy="nearest", use_arctan_geodesic=True)
+            prime = normalize_slot_to_prime(composite, strategy="geodesic")
             reduction = compute_curvature_reduction(composite, prime, use_arctan_geodesic=True)
             reductions.append(reduction)
         
@@ -117,8 +118,8 @@ class TestArctanGeodesicReduction(unittest.TestCase):
         small = 10
         large = 1000
         
-        prime_small = normalize_slot_to_prime(small, strategy="nearest", use_arctan_geodesic=True)
-        prime_large = normalize_slot_to_prime(large, strategy="nearest", use_arctan_geodesic=True)
+        prime_small = normalize_slot_to_prime(small, strategy="geodesic")
+        prime_large = normalize_slot_to_prime(large, strategy="geodesic")
         
         reduction_small = compute_curvature_reduction(small, prime_small, use_arctan_geodesic=True)
         reduction_large = compute_curvature_reduction(large, prime_large, use_arctan_geodesic=True)
@@ -133,7 +134,7 @@ class TestArctanGeodesicReduction(unittest.TestCase):
         primes = [2, 3, 5, 7, 11, 13, 17, 19, 23]
         
         for p in primes:
-            normalized = normalize_slot_to_prime(p, strategy="nearest", use_arctan_geodesic=True)
+            normalized = normalize_slot_to_prime(p, strategy="geodesic")
             self.assertEqual(normalized, p, f"Prime {p} should map to itself")
             
             reduction = compute_curvature_reduction(p, normalized, use_arctan_geodesic=True)
@@ -144,10 +145,10 @@ class TestArctanGeodesicPrimeSelection(unittest.TestCase):
     """Test prime selection using arctan-geodesic optimization."""
     
     def test_find_nearest_prime_with_geodesic(self):
-        """Test that nearest prime uses geodesic curvature for selection."""
+        """Test that geodesic prime uses geodesic curvature for selection."""
         # For some numbers, geodesic optimization might choose different prime
         n = 10
-        prime = find_nearest_prime(n, use_arctan_geodesic=True)
+        prime = find_geodesic_optimal_prime(n)
         
         # Should return a prime
         self.assertTrue(is_prime(prime))
@@ -158,16 +159,16 @@ class TestArctanGeodesicPrimeSelection(unittest.TestCase):
     def test_normalize_slot_consistency(self):
         """Test that normalization is deterministic."""
         for n in [4, 10, 20, 100]:
-            prime1 = normalize_slot_to_prime(n, strategy="nearest", use_arctan_geodesic=True)
-            prime2 = normalize_slot_to_prime(n, strategy="nearest", use_arctan_geodesic=True)
+            prime1 = normalize_slot_to_prime(n, strategy="geodesic")
+            prime2 = normalize_slot_to_prime(n, strategy="geodesic")
             
             self.assertEqual(prime1, prime2,
                            f"Normalization should be deterministic for n={n}")
     
     def test_next_strategy_still_works(self):
-        """Test that 'next' strategy still works with geodesic."""
+        """Test that 'next' strategy still works."""
         for n in [4, 10, 20, 100]:
-            prime = normalize_slot_to_prime(n, strategy="next", use_arctan_geodesic=True)
+            prime = normalize_slot_to_prime(n, strategy="next")
             
             # Should be prime
             self.assertTrue(is_prime(prime))
@@ -178,7 +179,7 @@ class TestArctanGeodesicPrimeSelection(unittest.TestCase):
     def test_none_strategy_returns_original(self):
         """Test that 'none' strategy returns original value."""
         for n in [4, 10, 20, 100]:
-            result = normalize_slot_to_prime(n, strategy="none", use_arctan_geodesic=True)
+            result = normalize_slot_to_prime(n, strategy="none")
             self.assertEqual(result, n)
 
 
@@ -308,7 +309,7 @@ class TestPerformance(unittest.TestCase):
         
         start = time.time()
         for n in [10, 20, 30, 50, 100, 200, 500, 1000]:
-            normalize_slot_to_prime(n, strategy="nearest", use_arctan_geodesic=True)
+            normalize_slot_to_prime(n, strategy="geodesic")
         elapsed = time.time() - start
         
         # Should be fast for typical slot values

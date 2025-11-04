@@ -74,11 +74,11 @@ cipher = TransecCipher(
     secret,
     slot_duration=3600,      # 1-hour slots
     drift_window=3,          # ±3 slots tolerance
-    prime_strategy="nearest" # Map to geodesic-optimal prime slot
+    prime_strategy="geodesic" # Map to geodesic-optimal prime slot
 )
 ```
 
-The arctan-geodesic formula `κ(n) = d(n) · ln(n+1) / e² · [1 + arctan(φ · frac(n/φ))]` leverages the golden ratio φ to create optimal synchronization paths through the discrete time-slot space.
+The arctan-geodesic formula `κ(n) = d(n) · ln(n+1) / e² · [1 + arctan(φ · frac(n/φ))]` leverages the golden ratio φ via Fibonacci convergent F₄₅/F₄₆ to create deterministic, optimal synchronization paths through discrete time-slot space using Q24 fixed-point arithmetic.
 
 #### OTAR-Lite Key Refresh
 

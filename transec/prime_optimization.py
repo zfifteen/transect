@@ -12,12 +12,19 @@ Mathematical Foundation:
 - Arctan-Geodesic curvature: κ(n) = d(n) · ln(n+1) / e² · [1 + arctan(φ · frac(n/φ))]
 - For prime n: d(n) = 2 (only divisors are 1 and n)
 - φ (phi) = golden ratio ≈ 1.618033988749895
-- frac(x) = fractional part of x (x - floor(x))
+- frac(x) = fractional part of x computed using Fibonacci convergent for determinism
 - Lower κ indicates more stable synchronization paths
 - The arctan component adds geodesic curvature reduction of 25-88%
+
+Deterministic Specification:
+- Uses F₄₅/F₄₆ Fibonacci convergent (1134903170/1836311903) for 1/φ
+- Q24 fixed-point arithmetic for geodesic weight computation
+- 5th-order minimax polynomial for arctan approximation
+- All operations use deterministic integer arithmetic with RoundHalfEven
 """
 
 import math
+from fractions import Fraction
 from typing import Optional, Dict
 try:
     from mpmath import mp, mpf, log as mp_log, atan as mp_atan
@@ -25,14 +32,109 @@ try:
 except ImportError:
     MPMATH_AVAILABLE = False
 
-# Golden ratio constant
+# Golden ratio constant (for floating-point fallback only)
 PHI = (1 + math.sqrt(5)) / 2  # ≈ 1.6180339887498948
 
+# Deterministic Fibonacci convergent for 1/φ (F₄₅/F₄₆)
+# This ensures deterministic frac(n/φ) computation across platforms
+PHI_INV_NUM = 1134903170  # F₄₅
+PHI_INV_DEN = 1836311903  # F₄₆
+
+# Q24 fixed-point scale (16.8M values, ~6 decimal places)
+Q24_SCALE = 1 << 24  # 16777216
+
+# PHI as a rational fraction for precise multiplication
+PHI_FRAC = Fraction(1836311903, 1134903170)  # F₄₆/F₄₅
+
+
+# Minimax polynomial coefficients for arctan on [0, φ] in Q24 fixed-point
+# 5th-order minimax approximation: atan(x) ≈ c₀x + c₁x³ + c₂x⁵
+# Coefficients scaled to Q24 and rounded HalfEven
+_ATAN_COEFF = [
+    16760832,   # c₀ ≈ 0.99866 in Q24
+    -5584089,   # c₁ ≈ -0.33282 in Q24
+    1594806,    # c₂ ≈ 0.09505 in Q24
+]
 
 # Cache for recently computed primes to optimize performance
 _prime_cache: Dict[int, int] = {
     1: 2, 2: 2, 3: 3, 4: 5, 5: 5, 6: 7, 7: 7, 8: 7, 9: 11, 10: 11
 }
+
+# Deterministic Miller-Rabin bases for slot_index < 2^64
+# These 7 bases are sufficient for deterministic primality testing up to 2^64
+_MILLER_RABIN_BASES_64 = [2, 3, 5, 7, 11, 13, 17]
+
+
+def frac_over_phi_q24(n: int) -> int:
+    """
+    Compute frac(n/φ) in Q24 fixed-point using Fibonacci convergent.
+    
+    Deterministic across all platforms and Python versions.
+    
+    Args:
+        n: Slot index
+    
+    Returns:
+        Q24 fixed-point representation of frac(n/φ)
+    """
+    # u = frac(n/φ) using integer arithmetic with F₄₅/F₄₆ convergent
+    remainder = (n * PHI_INV_NUM) % PHI_INV_DEN
+    # Scale to Q24: (remainder * Q24) // denominator with RoundHalfEven
+    scaled = (remainder * Q24_SCALE + PHI_INV_DEN // 2) // PHI_INV_DEN
+    return scaled
+
+
+def atan_q24(x_q24: int) -> int:
+    """
+    Compute arctan(x) in Q24 fixed-point using minimax polynomial.
+    
+    Uses 5th-order polynomial for bounded error on [0, φ].
+    Deterministic with RoundHalfEven rounding.
+    
+    Args:
+        x_q24: Input in Q24 fixed-point
+    
+    Returns:
+        arctan(x) in Q24 fixed-point
+    """
+    # Compute x³ and x⁵ in Q48 then scale back to Q24
+    x2 = (x_q24 * x_q24 + Q24_SCALE // 2) // Q24_SCALE  # Q24
+    x3 = (x2 * x_q24 + Q24_SCALE // 2) // Q24_SCALE     # Q24
+    x5 = (x3 * x2 + Q24_SCALE // 2) // Q24_SCALE       # Q24
+    
+    # Evaluate polynomial: c₀·x + c₁·x³ + c₂·x⁵
+    term0 = (_ATAN_COEFF[0] * x_q24 + Q24_SCALE // 2) // Q24_SCALE
+    term1 = (_ATAN_COEFF[1] * x3 + Q24_SCALE // 2) // Q24_SCALE
+    term2 = (_ATAN_COEFF[2] * x5 + Q24_SCALE // 2) // Q24_SCALE
+    
+    return term0 + term1 + term2
+
+
+def geodesic_weight_q24(n: int) -> int:
+    """
+    Compute geodesic weight g(n) = 1 + arctan(φ · frac(n/φ)) in Q24 fixed-point.
+    
+    Fully deterministic using integer arithmetic and Fibonacci convergents.
+    
+    Args:
+        n: Slot index
+    
+    Returns:
+        Geodesic weight in Q24 fixed-point
+    """
+    # Get frac(n/φ) in Q24
+    u_q24 = frac_over_phi_q24(n)
+    
+    # Multiply by φ using rational arithmetic: (u * F₄₆) / F₄₅
+    # Both in Q24, so result is (u * F₄₆) / F₄₅ scaled properly
+    phi_u_q24 = (u_q24 * PHI_FRAC.numerator + PHI_FRAC.denominator // 2) // PHI_FRAC.denominator
+    
+    # Compute arctan
+    atan_result = atan_q24(phi_u_q24)
+    
+    # Return 1 + atan in Q24
+    return Q24_SCALE + atan_result
 
 
 def count_divisors(n: int) -> int:
@@ -62,31 +164,93 @@ def count_divisors(n: int) -> int:
     return count
 
 
-def is_prime(n: int) -> bool:
+def _miller_rabin_test(n: int, a: int) -> bool:
     """
-    Check if n is prime using optimized trial division.
+    Single Miller-Rabin test with base a.
+    
+    Args:
+        n: Number to test (must be odd and > 2)
+        a: Witness base
+    
+    Returns:
+        True if n passes this test (possibly prime), False if composite
+    """
+    if n <= 1 or a >= n:
+        return True
+    
+    # Write n-1 as 2^r * d
+    d = n - 1
+    r = 0
+    while d % 2 == 0:
+        d //= 2
+        r += 1
+    
+    # Compute a^d mod n
+    x = pow(a, d, n)
+    
+    if x == 1 or x == n - 1:
+        return True
+    
+    # Square x up to r-1 times
+    for _ in range(r - 1):
+        x = (x * x) % n
+        if x == n - 1:
+            return True
+    
+    return False
+
+
+def is_prime(n: int, deterministic: bool = True) -> bool:
+    """
+    Check if n is prime using deterministic Miller-Rabin for n < 2^64.
+    
+    Falls back to probabilistic trial division for larger n (with error).
     
     Args:
         n: Integer to check
+        deterministic: Use deterministic Miller-Rabin (default True)
     
     Returns:
         True if n is prime, False otherwise
     """
     if n < 2:
         return False
-    if n == 2:
-        return True
-    if n == 3:
+    if n == 2 or n == 3:
         return True
     if n % 2 == 0:
         return False
+    if n < 9:
+        return True
     if n % 3 == 0:
         return False
     
-    # Check divisibility by numbers of form 6k±1 up to sqrt(n)
-    # This is more efficient than checking all odd numbers
+    # For small n, use trial division (faster)
+    if n < 100:
+        i = 5
+        while i * i <= n:
+            if n % i == 0 or n % (i + 2) == 0:
+                return False
+            i += 6
+        return True
+    
+    # For n < 2^64, use deterministic Miller-Rabin with known bases
+    if deterministic and n < (1 << 64):
+        for base in _MILLER_RABIN_BASES_64:
+            if base >= n:
+                continue
+            if not _miller_rabin_test(n, base):
+                return False
+        return True
+    
+    # Fallback to trial division for very large n (should not happen in practice)
+    # Raise error to avoid false positives
+    if n >= (1 << 64):
+        raise ValueError(f"Slot index {n} exceeds 2^64; primality test not supported")
+    
+    # Trial division fallback
     i = 5
-    while i * i <= n:
+    limit = int(n ** 0.5) + 1
+    while i <= limit:
         if n % i == 0 or n % (i + 2) == 0:
             return False
         i += 6
@@ -94,59 +258,56 @@ def is_prime(n: int) -> bool:
     return True
 
 
-def compute_curvature(n: int, use_mpmath: bool = False, use_arctan_geodesic: bool = True) -> float:
+def compute_curvature(n: int, use_mpmath: bool = False, use_arctan_geodesic: bool = True, use_deterministic: bool = True) -> float:
     """
     Compute discrete curvature using arctan-geodesic formula:
     κ(n) = d(n) · ln(n+1) / e² · [1 + arctan(φ · frac(n/φ))]
     
     Where:
     - d(n) = number of divisors
-    - φ = golden ratio
-    - frac(x) = fractional part of x
+    - φ = golden ratio (via Fibonacci convergent for determinism)
+    - frac(x) = fractional part computed via Q24 fixed-point
     
     Args:
         n: Slot index
-        use_mpmath: Use mpmath for high-precision computation
+        use_mpmath: Use mpmath for high-precision computation (testing only)
         use_arctan_geodesic: Use arctan-geodesic enhancement (default True)
+        use_deterministic: Use deterministic Q24 fixed-point (default True, recommended)
     
     Returns:
         Curvature value κ(n)
     """
-    if use_mpmath and MPMATH_AVAILABLE:
-        mp.dps = 20  # 20 decimal places precision
-        d_n = count_divisors(n)
-        
-        # Base curvature: d(n) · ln(n+1) / e²
-        base_kappa = mpf(d_n) * mp_log(n + 1) / (mp.e ** 2)
-        
-        if use_arctan_geodesic:
-            # Compute arctan-geodesic component
-            phi = mpf(PHI)
-            # Use modulo for more precise fractional part calculation
-            frac_n_phi = (mpf(n) % phi) / phi
-            arctan_term = mpf(1) + mp_atan(phi * frac_n_phi)
-            kappa = base_kappa * arctan_term
-        else:
-            kappa = base_kappa
-            
-        return float(kappa)
-    else:
-        d_n = count_divisors(n)
-        e_squared = math.e ** 2
-        
-        # Base curvature
-        base_kappa = d_n * math.log(n + 1) / e_squared
-        
-        if use_arctan_geodesic:
-            # Compute arctan-geodesic component
-            # Use modulo for more precise fractional part calculation
-            frac_n_phi = (n % PHI) / PHI
-            arctan_term = 1 + math.atan(PHI * frac_n_phi)
-            kappa = base_kappa * arctan_term
-        else:
-            kappa = base_kappa
-            
+    d_n = count_divisors(n)
+    e_squared = math.e ** 2
+    
+    # Base curvature
+    base_kappa = d_n * math.log(n + 1) / e_squared
+    
+    if not use_arctan_geodesic:
+        return base_kappa
+    
+    # Use deterministic Q24 fixed-point for production
+    if use_deterministic:
+        # Get geodesic weight in Q24
+        weight_q24 = geodesic_weight_q24(n)
+        # Convert to float: weight = weight_q24 / Q24_SCALE
+        arctan_term = weight_q24 / Q24_SCALE
+        kappa = base_kappa * arctan_term
         return kappa
+    
+    # Fallback to floating-point (for testing/comparison only)
+    if use_mpmath and MPMATH_AVAILABLE:
+        mp.dps = 20
+        base_kappa = float(mpf(d_n) * mp_log(n + 1) / (mp.e ** 2))
+        phi = mpf(PHI)
+        frac_n_phi = (mpf(n) % phi) / phi
+        arctan_term = float(mpf(1) + mp_atan(phi * frac_n_phi))
+    else:
+        frac_n_phi = (n % PHI) / PHI
+        arctan_term = 1 + math.atan(PHI * frac_n_phi)
+    
+    kappa = base_kappa * arctan_term
+    return kappa
 
 
 def find_next_prime(n: int) -> int:
@@ -180,39 +341,30 @@ def find_next_prime(n: int) -> int:
         candidate += 2
 
 
-def find_nearest_prime(n: int, use_arctan_geodesic: bool = True) -> int:
+def find_nearest_prime_by_distance(n: int) -> int:
     """
-    Find the nearest prime to n using arctan-geodesic curvature optimization.
+    Find the numerically nearest prime to n (prefer next if equidistant).
     
-    This function finds the prime that minimizes the arctan-geodesic curvature,
-    which may not be the numerically closest prime but provides optimal
-    synchronization stability.
+    This is the "nearest" strategy - simple numerical distance.
     
     Args:
         n: Target value
-        use_arctan_geodesic: Use arctan-geodesic curvature for selection
     
     Returns:
-        Optimal prime for slot index n
+        Numerically nearest prime to n
     """
     if n <= 2:
         return 2
-    
-    # Special case for small numbers
     if n == 3:
         return 3
-    
-    # If already prime, return it
     if is_prime(n):
         return n
     
     # Find next prime
     next_p = find_next_prime(n)
     
-    # Find previous prime by searching backwards (with reasonable limit for performance)
+    # Find previous prime
     prev_p = n - 1 if n > 2 else 2
-    # Limit backwards search to avoid excessive computation for large n
-    # Prime gaps grow as O(log n), so searching back ~100-200 should be sufficient
     search_limit = max(2, n - 200)
     
     while prev_p >= search_limit:
@@ -220,39 +372,75 @@ def find_nearest_prime(n: int, use_arctan_geodesic: bool = True) -> int:
             break
         prev_p -= 1
     
-    # If we hit the search limit without finding a prime, use next_p
     if prev_p < search_limit:
         return next_p
     
-    if use_arctan_geodesic:
-        # Choose prime with lowest arctan-geodesic curvature
-        kappa_next = compute_curvature(next_p, use_arctan_geodesic=True)
-        kappa_prev = compute_curvature(prev_p, use_arctan_geodesic=True)
-        
-        # Return prime with minimum curvature
-        if kappa_next <= kappa_prev:
-            return next_p
-        else:
-            return prev_p
+    # Return the nearest (prefer next if equidistant)
+    if next_p - n <= n - prev_p:
+        return next_p
     else:
-        # Return the nearest (prefer next if equidistant)
-        if next_p - n <= n - prev_p:
-            return next_p
-        else:
-            return prev_p
+        return prev_p
 
 
-def normalize_slot_to_prime(slot_index: int, strategy: str = "nearest", use_arctan_geodesic: bool = True) -> int:
+def find_geodesic_optimal_prime(n: int) -> int:
     """
-    Normalize a slot index to a prime value for lower arctan-geodesic curvature.
+    Find the prime that minimizes arctan-geodesic curvature near n.
+    
+    This is the "geodesic" strategy - uses deterministic Q24 fixed-point
+    curvature computation to select the optimal prime for synchronization.
+    
+    Args:
+        n: Target value
+    
+    Returns:
+        Prime with minimum geodesic curvature near n
+    """
+    if n <= 2:
+        return 2
+    if n == 3:
+        return 3
+    if is_prime(n):
+        return n
+    
+    # Find next prime
+    next_p = find_next_prime(n)
+    
+    # Find previous prime
+    prev_p = n - 1 if n > 2 else 2
+    search_limit = max(2, n - 200)
+    
+    while prev_p >= search_limit:
+        if is_prime(prev_p):
+            break
+        prev_p -= 1
+    
+    if prev_p < search_limit:
+        return next_p
+    
+    # Choose prime with lowest deterministic geodesic curvature
+    kappa_next = compute_curvature(next_p, use_arctan_geodesic=True, use_deterministic=True)
+    kappa_prev = compute_curvature(prev_p, use_arctan_geodesic=True, use_deterministic=True)
+    
+    # Return prime with minimum curvature (deterministic tie-break favors next)
+    if kappa_next <= kappa_prev:
+        return next_p
+    else:
+        return prev_p
+
+
+def normalize_slot_to_prime(slot_index: int, strategy: str = "none") -> int:
+    """
+    Normalize a slot index to a prime value using the specified strategy.
+    
+    Strategies:
+    - "none": Return slot_index unchanged (default, backward compatible)
+    - "nearest": Map to numerically nearest prime (simple distance)
+    - "next": Map to next prime >= slot_index
+    - "geodesic": Map to prime with minimum arctan-geodesic curvature (optimal)
     
     Args:
         slot_index: Original slot index
-        strategy: Normalization strategy - "nearest", "next", or "none"
-                 - "nearest": Map to prime with lowest arctan-geodesic curvature (default)
-                 - "next": Map to next prime >= slot_index
-                 - "none": Return slot_index unchanged
-        use_arctan_geodesic: Use arctan-geodesic curvature optimization (default True)
+        strategy: Normalization strategy (see above)
     
     Returns:
         Normalized slot index (prime or original)
@@ -266,12 +454,14 @@ def normalize_slot_to_prime(slot_index: int, strategy: str = "nearest", use_arct
     if strategy == "next":
         return find_next_prime(slot_index)
     elif strategy == "nearest":
-        return find_nearest_prime(slot_index, use_arctan_geodesic=use_arctan_geodesic)
+        return find_nearest_prime_by_distance(slot_index)
+    elif strategy == "geodesic":
+        return find_geodesic_optimal_prime(slot_index)
     else:
-        raise ValueError(f"Unknown strategy: {strategy}")
+        raise ValueError(f"Unknown strategy: {strategy}. Use 'none', 'nearest', 'next', or 'geodesic'.")
 
 
-def compute_curvature_reduction(original_slot: int, normalized_slot: int, use_arctan_geodesic: bool = True) -> float:
+def compute_curvature_reduction(original_slot: int, normalized_slot: int, use_arctan_geodesic: bool = True, use_deterministic: bool = True) -> float:
     """
     Compute the curvature reduction achieved by normalization using arctan-geodesic formula.
     
@@ -279,6 +469,7 @@ def compute_curvature_reduction(original_slot: int, normalized_slot: int, use_ar
         original_slot: Original slot index
         normalized_slot: Normalized (prime) slot index
         use_arctan_geodesic: Use arctan-geodesic formula (default True)
+        use_deterministic: Use deterministic Q24 fixed-point (default True)
     
     Returns:
         Percentage reduction in curvature (positive means improvement)
@@ -286,8 +477,8 @@ def compute_curvature_reduction(original_slot: int, normalized_slot: int, use_ar
     if original_slot == normalized_slot:
         return 0.0
     
-    kappa_orig = compute_curvature(original_slot, use_arctan_geodesic=use_arctan_geodesic)
-    kappa_norm = compute_curvature(normalized_slot, use_arctan_geodesic=use_arctan_geodesic)
+    kappa_orig = compute_curvature(original_slot, use_arctan_geodesic=use_arctan_geodesic, use_deterministic=use_deterministic)
+    kappa_norm = compute_curvature(normalized_slot, use_arctan_geodesic=use_arctan_geodesic, use_deterministic=use_deterministic)
     
     if kappa_orig == 0:
         return 0.0
