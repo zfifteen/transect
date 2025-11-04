@@ -207,9 +207,13 @@ def main():
     print("  • docs/TRANSEC_PRIME_OPTIMIZATION.md")
     print("  • tests/test_arctan_geodesic.py")
     print("\nReferences:")
-    print("  • Frequency hopping over finite fields (arXiv:1506.07372)")
-    print("  • Optimal frequency-hopping sequences (IET Research)")
-    print("  • TRANSEC frequency hopping (Aerospace Corp.)")
+    print("  • Yang, K., et al. (2015). 'Frequency hopping sequences over finite fields'")
+    print("    arXiv:1506.07372 - https://arxiv.org/abs/1506.07372")
+    print("  • Fan, P. and Darnell, M. (2014). 'Optimal frequency-hopping sequences'")
+    print("    IET Electronics Letters, Vol. 50, Issue 23")
+    print("    DOI: 10.1049/el.2013.3840")
+    print("  • SPARTA Aerospace (n.d.). 'TRANSEC - Transmission Security'")
+    print("    https://sparta.aerospace.org/countermeasures/CM0029")
     print()
 
 

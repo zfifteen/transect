@@ -26,7 +26,7 @@ except ImportError:
     MPMATH_AVAILABLE = False
 
 # Golden ratio constant
-PHI = (1 + math.sqrt(5)) / 2  # ≈ 1.618033988749895
+PHI = (1 + math.sqrt(5)) / 2  # ≈ 1.6180339887498948
 
 
 # Cache for recently computed primes to optimize performance
@@ -122,7 +122,8 @@ def compute_curvature(n: int, use_mpmath: bool = False, use_arctan_geodesic: boo
         if use_arctan_geodesic:
             # Compute arctan-geodesic component
             phi = mpf(PHI)
-            frac_n_phi = mpf(n) / phi - mpf(int(n / phi))  # fractional part
+            # Use modulo for more precise fractional part calculation
+            frac_n_phi = (mpf(n) % phi) / phi
             arctan_term = mpf(1) + mp_atan(phi * frac_n_phi)
             kappa = base_kappa * arctan_term
         else:
@@ -138,7 +139,8 @@ def compute_curvature(n: int, use_mpmath: bool = False, use_arctan_geodesic: boo
         
         if use_arctan_geodesic:
             # Compute arctan-geodesic component
-            frac_n_phi = (n / PHI) - math.floor(n / PHI)  # fractional part
+            # Use modulo for more precise fractional part calculation
+            frac_n_phi = (n % PHI) / PHI
             arctan_term = 1 + math.atan(PHI * frac_n_phi)
             kappa = base_kappa * arctan_term
         else:
@@ -207,9 +209,11 @@ def find_nearest_prime(n: int, use_arctan_geodesic: bool = True) -> int:
     # Find next prime
     next_p = find_next_prime(n)
     
-    # Find previous prime by searching backwards
+    # Find previous prime by searching backwards (with reasonable limit for performance)
     prev_p = n - 1 if n > 2 else 2
-    search_limit = 2
+    # Limit backwards search to avoid excessive computation for large n
+    # Prime gaps grow as O(log n), so searching back ~100-200 should be sufficient
+    search_limit = max(2, n - 200)
     
     while prev_p >= search_limit:
         if is_prime(prev_p):
