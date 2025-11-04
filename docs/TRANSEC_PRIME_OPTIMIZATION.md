@@ -31,6 +31,32 @@ The golden ratio φ = (1 + √5) / 2 ≈ 1.618033988749895 is fundamental to the
 
 By incorporating φ into the curvature formula via the term `frac(n/φ)`, we leverage quasi-periodic properties that align with prime distribution patterns, creating optimal "geodesic paths" through the discrete time-slot space.
 
+### Deterministic Implementation Specification
+
+To ensure cross-platform determinism (critical for sender/receiver agreement in TRANSEC):
+
+**Fibonacci Convergent for 1/φ:**
+- Uses F₄₅/F₄₆ = 1134903170/1836311903 as rational approximation
+- Error < 10⁻¹⁶ from exact 1/φ
+- Pure integer arithmetic for `frac(n/φ) = ((n · F₄₅) mod F₄₆) / F₄₆`
+
+**Q24 Fixed-Point Arithmetic:**
+- Scale factor: 2²⁴ = 16,777,216
+- Precision: ~6 decimal places (5.96×10⁻⁸)
+- All operations use integer arithmetic with RoundHalfEven
+
+**Arctan Approximation:**
+- 5th-order minimax polynomial on [0, φ]
+- Coefficients frozen in source code
+- Maximum error < 10⁻⁵ over domain
+
+**Primality Testing:**
+- Deterministic Miller-Rabin with 7 known bases for n < 2⁶⁴
+- Bases: {2, 3, 5, 7, 11, 13, 17}
+- ValueError raised for n ≥ 2⁶⁴ to prevent false positives
+
+This specification ensures that for any slot index n, the computed geodesic weight g(n) is **bit-identical** across all platforms, Python versions (3.8-3.12), and implementations (CPython, PyPy).
+
 ### Prime Advantage with Arctan-Geodesic Enhancement
 
 For prime numbers, `d(n) = 2` (only divisors are 1 and n itself), which yields the minimum possible curvature for any given magnitude. The arctan-geodesic term further enhances this advantage by:
@@ -93,7 +119,7 @@ secret = generate_shared_secret()
 cipher = TransecCipher(secret, prime_strategy="none")
 
 # Map to nearest prime
-cipher = TransecCipher(secret, prime_strategy="nearest")
+cipher = TransecCipher(secret, prime_strategy="geodesic")
 
 # Map to next prime >= current slot
 cipher = TransecCipher(secret, prime_strategy="next")
@@ -145,7 +171,7 @@ cipher = TransecCipher(
     secret,
     slot_duration=3600,      # 1 hour slots
     drift_window=3,          # ±3 slots tolerance
-    prime_strategy="nearest"
+    prime_strategy="geodesic"
 )
 ```
 
@@ -194,11 +220,11 @@ from transec import TransecCipher, generate_shared_secret
 secret = generate_shared_secret()
 
 # Sender
-sender = TransecCipher(secret, slot_duration=3600, prime_strategy="nearest")
+sender = TransecCipher(secret, slot_duration=3600, prime_strategy="geodesic")
 packet = sender.seal(b"Hello, World!", sequence=1)
 
 # Receiver
-receiver = TransecCipher(secret, slot_duration=3600, prime_strategy="nearest")
+receiver = TransecCipher(secret, slot_duration=3600, prime_strategy="geodesic")
 plaintext = receiver.open(packet)
 print(plaintext.decode())  # "Hello, World!"
 ```
@@ -219,7 +245,7 @@ receiver = TransecCipher(secret, prime_strategy="none")
 To migrate an existing TRANSEC deployment to prime optimization:
 
 1. **Phase 1**: Keep all nodes at `prime_strategy="none"`
-2. **Phase 2**: Coordinate a flag day to switch all nodes simultaneously to `prime_strategy="nearest"`
+2. **Phase 2**: Coordinate a flag day to switch all nodes simultaneously to `prime_strategy="geodesic"`
 3. **Phase 3**: Monitor for decryption failures and adjust `drift_window` if needed
 
 ## Testing
