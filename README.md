@@ -137,11 +137,23 @@ cipher = OTARTransecCipher(
 
 ### Key Derivation
 
+Per-slot keys are derived using HKDF-SHA256, following the recommendations of RFC 5869. The process is designed to be deterministic and secure:
+
+1.  **IKM (Input Keying Material)**: The `shared_secret` serves as the initial entropy source.
+2.  **Salt**: A fixed, 32-byte zero-filled salt is used during the HKDF-Extract phase. This is a standard practice for deterministic key derivation when the IKM is already a high-entropy key.
+3.  **Info**: To ensure each time slot has a unique key, the `slot_index` is combined with a versioned, domain-separation tag (e.g., `"transect/hkdf/v1"`) and then hashed using BLAKE2s. This hash becomes the `info` parameter for the HKDF-Expand phase. Using `info` for context-specific data is the standard-compliant way to achieve domain separation.
+4.  **OKM (Output Keying Material)**: The final key `K_t` is the output of the HKDF-Expand operation.
+
 ```
-slot_index = floor(current_time / slot_duration)
-info = context || slot_index (8 bytes, big-endian)
-K_t = HKDF-SHA256(shared_secret, salt=None, info=info, length=32)
+# HKDF-Extract
+PRK = HMAC-SHA256(salt, shared_secret)
+
+# HKDF-Expand
+info_hash = BLAKE2s("transect/hkdf/v1" || slot_index)
+K_t = HMAC-SHA256(PRK, info_hash || 0x01)
 ```
+
+This approach avoids the cryptographic pitfalls of using predictable values for the `salt` and the numerical instability of floating-point math, which were identified and corrected during development. The versioned `info` parameter allows for future upgrades to the KDF algorithm without causing key collisions.
 
 ### Packet Structure
 
@@ -162,6 +174,8 @@ K_t = HKDF-SHA256(shared_secret, salt=None, info=info, length=32)
 - Requires time synchronization (GPS/NTP/monotonic counter)
 - No forward secrecy without additional ratcheting
 - Time desynchronization attacks require authenticated time source
+
+The key derivation function (KDF) was specifically designed to prevent vulnerabilities associated with predictable inputs. Initially, a scheme based on cadence-based timing was considered, but it was found to have a negative effect on security by making the HKDF `salt` predictable. The current implementation corrects this by using the `info` parameter for domain separation, which is the standard-compliant approach. This ensures that the `salt` can remain a fixed, high-entropy value (or zero, as is common in deterministic scenarios), preserving the security of the HKDF-Extract phase.
 
 ## Performance
 
