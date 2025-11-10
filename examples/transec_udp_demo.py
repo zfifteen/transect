@@ -21,6 +21,7 @@ import threading
 import argparse
 import json
 import random
+import csv
 
 # Add parent directory to path if running from examples/
 if os.path.exists('../python/transec.py'):
@@ -186,7 +187,7 @@ class TransecUDPClient:
         return skew
     
     
-    def run_benchmark(self, count: int = 100, log_file: str = None):
+    def run_benchmark(self, count: int = 100, log_file: str = None, csv_file: str = None):
         """Run performance benchmark with optional logging."""
         print(f"🔐 TRANSEC UDP Client - Benchmarking {count} messages")
         print(f"Connected to {self.host}:{self.port}")
@@ -198,6 +199,7 @@ class TransecUDPClient:
         rejections = 0
         total_time = 0
         rtts = []
+        csv_rows = []  # Store data for CSV export
         
         log_fh = None
         if log_file:
@@ -253,6 +255,17 @@ class TransecUDPClient:
                 print(f"Error at message {i+1}: {e}")
                 rtt_ms = -1.0
             
+            # Store for CSV export
+            if csv_file:
+                csv_rows.append({
+                    'message_id': i + 1,
+                    'sequence': self.sequence,
+                    'success': success,
+                    'rtt_ms': rtt_ms,
+                    'slot_index': current_slot if success else 0,
+                    'skew_applied': skew if self.skew_slots > 0 else 0,
+                })
+            
             if log_fh:
                 event = {
                     'event': 'message_sent',
@@ -279,17 +292,34 @@ class TransecUDPClient:
             log_fh.close()
             print(f"Log written to {log_file}")
         
+        # Write CSV file if requested
+        if csv_file:
+            os.makedirs(os.path.dirname(csv_file) or '.', exist_ok=True)
+            with open(csv_file, 'w', newline='') as f:
+                if csv_rows:
+                    fieldnames = list(csv_rows[0].keys())
+                    writer = csv.DictWriter(f, fieldnames=fieldnames)
+                    writer.writeheader()
+                    writer.writerows(csv_rows)
+            print(f"CSV results written to {csv_file}")
+        
         print()
         print("=" * 60)
         print("Benchmark Results:")
         total_messages = successes + rejections
-        print(f"  Success rate: {successes}/{total_messages} ({successes/total_messages*100:.1f}%)")
-        print(f"  Rejections: {rejections} ({rejections/total_messages*100:.1f}%)")
+        success_rate = successes/total_messages*100 if total_messages > 0 else 0
+        rejection_rate = rejections/total_messages*100 if total_messages > 0 else 0
+        print(f"  Success rate: {successes}/{total_messages} ({success_rate:.1f}%)")
+        print(f"  Rejections: {rejections} ({rejection_rate:.1f}%)")
         if rtts:
-            print(f"  Average RTT: {sum(rtts)/len(rtts):.2f}ms")
-            print(f"  Min RTT: {min(rtts):.2f}ms")
-            print(f"  Max RTT: {max(rtts):.2f}ms")
-            print(f"  Throughput: {successes/total_time:.1f} msg/sec")
+            avg_rtt = sum(rtts)/len(rtts)
+            min_rtt = min(rtts)
+            max_rtt = max(rtts)
+            throughput = successes/total_time if total_time > 0 else 0
+            print(f"  Average RTT: {avg_rtt:.2f}ms")
+            print(f"  Min RTT: {min_rtt:.2f}ms")
+            print(f"  Max RTT: {max_rtt:.2f}ms")
+            print(f"  Throughput: {throughput:.1f} msg/sec")
         print("=" * 60)
         
         self.socket.close()
@@ -348,6 +378,10 @@ def main():
         "--out",
         help="Output log file for benchmark (LDJSON format)"
     )
+    parser.add_argument(
+        "--output",
+        help="Output CSV file for benchmark results"
+    )
     
     args = parser.parse_args()
     
@@ -384,7 +418,7 @@ def main():
             prime_strategy=args.prime_strategy,
             skew_slots=args.skew_slots
         )
-        client.run_benchmark(args.count, log_file=args.out)
+        client.run_benchmark(args.count, log_file=args.out, csv_file=args.output)
 
 
 if __name__ == "__main__":
