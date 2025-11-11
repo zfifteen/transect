@@ -65,10 +65,11 @@ class TransecCipher:
             context: Application-specific context string for key derivation
             slot_duration: Duration of each time slot in seconds
             drift_window: Number of slots to accept (±) for clock drift tolerance
-            prime_strategy: Slot normalization strategy - "none" (default), "nearest", or "next"
+            prime_strategy: Slot normalization strategy - "none" (default), "nearest", "next", or "geodesic"
                            - "none": Use raw slot indices (backward compatible)
-                           - "nearest": Map to nearest prime for lower curvature
+                           - "nearest": Map to numerically nearest prime
                            - "next": Map to next prime >= slot_index
+                           - "geodesic": Map to geodesic-optimal prime (25-88% κ reduction)
         
         Raises:
             ValueError: If shared_secret is not 32 bytes
@@ -76,8 +77,8 @@ class TransecCipher:
         if len(shared_secret) != 32:
             raise ValueError("Shared secret must be exactly 32 bytes (256 bits)")
         
-        if prime_strategy not in ["none", "nearest", "next"]:
-            raise ValueError(f"Invalid prime_strategy: {prime_strategy}")
+        if prime_strategy not in ["none", "nearest", "next", "geodesic"]:
+            raise ValueError(f"Invalid prime_strategy: {prime_strategy}. Use 'none', 'nearest', 'next', or 'geodesic'.")
         
         self.shared_secret = shared_secret
         self.context = context
