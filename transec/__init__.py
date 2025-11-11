@@ -70,6 +70,22 @@ except ImportError:
     is_prime = None
     count_divisors = None
 
+# KDF utilities with golden ratio-based salt generation
+try:
+    from .kdf import (
+        theta_prime,
+        hkdf_salt_for_slot,
+        test_salt_diversity,
+        PHI,
+    )
+    KDF_AVAILABLE = True
+except ImportError:
+    KDF_AVAILABLE = False
+    theta_prime = None
+    hkdf_salt_for_slot = None
+    test_salt_diversity = None
+    PHI = None
+
 __all__ = [
     # Core
     'TransecCipher',
@@ -88,6 +104,12 @@ __all__ = [
     'is_prime',
     'count_divisors',
     
+    # KDF utilities
+    'theta_prime',
+    'hkdf_salt_for_slot',
+    'test_salt_diversity',
+    'PHI',
+    
     # Constants
     'DEFAULT_CONTEXT',
     'DEFAULT_SLOT_DURATION',
@@ -98,6 +120,7 @@ __all__ = [
     'ADAPTIVE_AVAILABLE',
     'OTAR_AVAILABLE',
     'PRIME_OPTIMIZATION_AVAILABLE',
+    'KDF_AVAILABLE',
     
     # Metadata
     '__version__',
