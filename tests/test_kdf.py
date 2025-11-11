@@ -11,7 +11,14 @@ import hashlib
 # Add parent directory to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
-from transec.kdf import hkdf_expand_slot, _hkdf_info_for_slot
+from transec.kdf import (
+    hkdf_expand_slot, 
+    _hkdf_info_for_slot,
+    theta_prime,
+    PHI,
+    hkdf_salt_for_slot,
+    test_salt_diversity
+)
 
 class TestHKDFExpandSlot(unittest.TestCase):
     """Test the hkdf_expand_slot function."""
@@ -103,6 +110,133 @@ class TestHKDFInfoForSlot(unittest.TestCase):
         h.update(domain_sep)
         h.update((123).to_bytes(8, "big"))
         self.assertEqual(info, h.digest())
+
+
+class TestThetaPrime(unittest.TestCase):
+    """Test the theta_prime geometric resolution function."""
+    
+    def test_theta_prime_basic(self):
+        """Test basic theta_prime computation."""
+        import math
+        # For n=0, theta_prime should be PHI * 0^k = 0
+        result = theta_prime(0, k=0.3)
+        self.assertAlmostEqual(result, 0.0, places=10)
+        
+        # For n=1, verify non-zero result
+        result = theta_prime(1, k=0.3)
+        self.assertGreater(result, 0.0)
+        self.assertLessEqual(result, PHI)
+    
+    def test_theta_prime_phi_constant(self):
+        """Test that PHI constant has the correct value."""
+        import math
+        expected_phi = (1 + math.sqrt(5)) / 2
+        self.assertAlmostEqual(PHI, expected_phi, places=10)
+        self.assertAlmostEqual(PHI, 1.618033988749895, places=10)
+    
+    def test_theta_prime_deterministic(self):
+        """Test that theta_prime is deterministic."""
+        for n in [10, 100, 1000]:
+            result1 = theta_prime(n, k=0.3)
+            result2 = theta_prime(n, k=0.3)
+            self.assertEqual(result1, result2)
+    
+    def test_theta_prime_different_k(self):
+        """Test theta_prime with different k values."""
+        n = 100
+        result_k03 = theta_prime(n, k=0.3)
+        result_k05 = theta_prime(n, k=0.5)
+        result_k10 = theta_prime(n, k=1.0)
+        
+        # Results should differ with different k
+        self.assertNotEqual(result_k03, result_k05)
+        self.assertNotEqual(result_k05, result_k10)
+    
+    def test_theta_prime_negative_n(self):
+        """Test that negative n raises ValueError."""
+        with self.assertRaises(ValueError):
+            theta_prime(-1, k=0.3)
+    
+    def test_theta_prime_negative_k(self):
+        """Test that negative k raises ValueError."""
+        with self.assertRaises(ValueError):
+            theta_prime(10, k=-0.1)
+
+
+class TestHKDFSaltForSlot(unittest.TestCase):
+    """Test the hkdf_salt_for_slot function."""
+    
+    def test_salt_length(self):
+        """Test that generated salt has correct length."""
+        salt = hkdf_salt_for_slot(42)
+        self.assertEqual(len(salt), 32)
+    
+    def test_salt_deterministic(self):
+        """Test that salt generation is deterministic."""
+        for slot in [0, 1, 100, 1000]:
+            salt1 = hkdf_salt_for_slot(slot)
+            salt2 = hkdf_salt_for_slot(slot)
+            self.assertEqual(salt1, salt2)
+    
+    def test_salt_uniqueness(self):
+        """Test that different slots produce different salts."""
+        salt1 = hkdf_salt_for_slot(0)
+        salt2 = hkdf_salt_for_slot(1)
+        salt3 = hkdf_salt_for_slot(100)
+        
+        self.assertNotEqual(salt1, salt2)
+        self.assertNotEqual(salt2, salt3)
+        self.assertNotEqual(salt1, salt3)
+    
+    def test_salt_negative_slot(self):
+        """Test that negative slot raises ValueError."""
+        with self.assertRaises(ValueError):
+            hkdf_salt_for_slot(-1)
+    
+    def test_salt_high_entropy(self):
+        """Test that salts have high entropy (no obvious patterns)."""
+        # Generate multiple salts and check for diversity
+        salts = [hkdf_salt_for_slot(i) for i in range(10)]
+        
+        # Check that they're all different
+        unique_salts = set(salts)
+        self.assertEqual(len(unique_salts), 10)
+        
+        # Check that each salt has mixed bits (not all zeros or ones)
+        for salt in salts:
+            ones_count = sum(bin(byte).count('1') for byte in salt)
+            # Expect roughly 128 bits set out of 256 (within reasonable bounds)
+            self.assertGreater(ones_count, 50)
+            self.assertLess(ones_count, 206)
+
+
+class TestSaltDiversity(unittest.TestCase):
+    """Test the test_salt_diversity validation function."""
+    
+    def test_diversity_passes(self):
+        """Test that salt diversity validation passes with reasonable parameters."""
+        # This should pass with default parameters
+        result = test_salt_diversity(num_slots=100, min_hamming_distance=30)
+        self.assertTrue(result)
+    
+    def test_diversity_deterministic(self):
+        """Test that diversity test is deterministic."""
+        result1 = test_salt_diversity(num_slots=50, min_hamming_distance=20)
+        result2 = test_salt_diversity(num_slots=50, min_hamming_distance=20)
+        self.assertEqual(result1, result2)
+    
+    def test_diversity_invalid_num_slots(self):
+        """Test that num_slots < 2 raises ValueError."""
+        with self.assertRaises(ValueError):
+            test_salt_diversity(num_slots=1)
+    
+    def test_diversity_high_threshold_fails(self):
+        """Test that unreasonably high threshold causes assertion."""
+        # Hamming distance of 256 bits (all different) is impossible for BLAKE2s
+        # which will have approximately 128 bits different on average
+        with self.assertRaises(AssertionError):
+            test_salt_diversity(num_slots=10, min_hamming_distance=250)
+
 
 if __name__ == '__main__':
     unittest.main()

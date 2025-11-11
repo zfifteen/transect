@@ -61,6 +61,7 @@ Thumbs.db
 # Benchmark outputs
 *.log
 results.csv
+results/
 plots/
 
 # Temp files

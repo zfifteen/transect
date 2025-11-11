@@ -30,7 +30,9 @@ setup(
             'pytest-cov>=4.0.0',
         ],
         'optional': [
-            'mpmath>=1.3.0',  # For prime optimization
+            'mpmath>=1.3.0',  # For high-precision prime optimization
+            'numpy>=1.20.0',  # For statistical analysis and benchmarking
+            'sympy>=1.9',     # For symbolic computations and prime testing
         ],
     },
     python_requires='>=3.8',
